@@ -46,6 +46,7 @@ func TestBuildNodeFromTemplateSetsResources(t *testing.T) {
 		reservedCpu    string
 		reservedMemory string
 		expectedErr    bool
+		pods           *MaxPodsPerNode
 	}
 	testCases := []testCase{
 		{
@@ -87,6 +88,14 @@ func TestBuildNodeFromTemplateSetsResources(t *testing.T) {
 			scenario:    "totally messed up kube-env",
 			kubeEnv:     "This kube-env is totally messed up",
 			expectedErr: true,
+		}, {
+			scenario:    "max pods per node specified",
+			kubeEnv:        "",
+			physicalCpu:    8,
+			physicalMemory: 200 * units.MiB,
+			pods:           &MaxPodsPerNode{30},
+			kubeReserved:   false,
+			expectedErr:    false,
 		},
 	}
 	for _, tc := range testCases {
@@ -110,7 +119,7 @@ func TestBuildNodeFromTemplateSetsResources(t *testing.T) {
 			if tc.kubeEnv != "" {
 				template.Properties.Metadata.Items = []*gce.MetadataItems{{Key: "kube-env", Value: &tc.kubeEnv}}
 			}
-			node, err := tb.BuildNodeFromTemplate(mig, template, tc.physicalCpu, tc.physicalMemory)
+			node, err := tb.BuildNodeFromTemplate(mig, template, tc.physicalCpu, tc.physicalMemory, tc.pods)
 			if tc.expectedErr {
 				assert.Error(t, err)
 			} else {
@@ -119,7 +128,7 @@ func TestBuildNodeFromTemplateSetsResources(t *testing.T) {
 				assert.NotNil(t, node.Status)
 				assert.NotNil(t, node.Status.Capacity)
 				assert.NotNil(t, node.Status.Allocatable)
-				capacity, err := tb.BuildCapacity(tc.physicalCpu, tc.physicalMemory, tc.accelerators, OperatingSystemLinux)
+				capacity, err := tb.BuildCapacity(tc.physicalCpu, tc.physicalMemory, tc.accelerators, OperatingSystemLinux, tc.pods)
 				assert.NoError(t, err)
 				assertEqualResourceLists(t, "Capacity", capacity, node.Status.Capacity)
 				if !tc.kubeReserved {
@@ -361,7 +370,7 @@ func TestBuildCapacityMemory(t *testing.T) {
 		t.Run(fmt.Sprintf("%v", idx), func(t *testing.T) {
 			tb := GceTemplateBuilder{}
 			noAccelerators := make([]*gce.AcceleratorConfig, 0)
-			buildCapacity, err := tb.BuildCapacity(tc.physicalCpu, tc.physicalMemory, noAccelerators, tc.os)
+			buildCapacity, err := tb.BuildCapacity(tc.physicalCpu, tc.physicalMemory, noAccelerators, tc.os, nil)
 			assert.NoError(t, err)
 			expectedCapacity, err := makeResourceList2(tc.physicalCpu, tc.expectedCapacityMemory, 0, 110)
 			assert.NoError(t, err)
