@@ -554,9 +554,7 @@ func (csr *ClusterStateRegistry) updateReadinessStats(currentTime time.Time) {
 		current.Registered++
 		if deletetaint.HasToBeDeletedTaint(node) {
 			current.Deleted++
-		} else if stillStarting := isNodeStillStarting(node); stillStarting && node.CreationTimestamp.Time.Add(MaxNodeStartupTime).Before(currentTime) {
-			current.LongNotStarted++
-		} else if stillStarting {
+		} else if !ready && node.CreationTimestamp.Time.Add(MaxNodeStartupTime).After(currentTime) {
 			current.NotStarted++
 		} else if ready {
 			current.Ready++
@@ -858,39 +856,6 @@ func buildScaleDownStatusClusterwide(candidates map[string][]string, lastProbed 
 		condition.Status = api.ClusterAutoscalerNoCandidates
 	}
 	return condition
-}
-
-func hasTaint(node *apiv1.Node, taintKey string) bool {
-	for _, taint := range node.Spec.Taints {
-		if taint.Key == taintKey {
-			return true
-		}
-	}
-	return false
-}
-
-func isNodeStillStarting(node *apiv1.Node) bool {
-	for _, condition := range node.Status.Conditions {
-		if condition.Type == apiv1.NodeReady {
-			notReady := condition.Status != apiv1.ConditionTrue || hasTaint(node, apiv1.TaintNodeNotReady)
-			if notReady && condition.LastTransitionTime.Time.Sub(node.CreationTimestamp.Time) < MaxStatusSettingDelayAfterCreation {
-				return true
-			}
-		}
-		if condition.Type == apiv1.NodeDiskPressure {
-			notReady := condition.Status == apiv1.ConditionTrue || hasTaint(node, apiv1.TaintNodeDiskPressure)
-			if notReady && condition.LastTransitionTime.Time.Sub(node.CreationTimestamp.Time) < MaxStatusSettingDelayAfterCreation {
-				return true
-			}
-		}
-		if condition.Type == apiv1.NodeNetworkUnavailable {
-			notReady := condition.Status == apiv1.ConditionTrue || hasTaint(node, apiv1.TaintNodeNetworkUnavailable)
-			if notReady && condition.LastTransitionTime.Time.Sub(node.CreationTimestamp.Time) < MaxStatusSettingDelayAfterCreation {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func updateLastTransition(oldStatus, newStatus *api.ClusterAutoscalerStatus) {
